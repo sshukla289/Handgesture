@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture to Language</title>
+    <style>
+        :root {
+            --bg: #f3efe7;
+            --panel: rgba(255, 251, 245, 0.84);
+            --panel-strong: rgba(255, 255, 255, 0.94);
+            --text: #1f2937;
+            --muted: #5d6472;
+            --accent: #c95519;
+            --accent-dark: #8e350b;
+            --accent-soft: rgba(201, 85, 25, 0.12);
+            --teal: #0f766e;
+            --rose: #be185d;
+            --border: rgba(201, 157, 121, 0.28);
+            --shadow: 0 24px 60px rgba(104, 61, 24, 0.12);
+            --radius-xl: 28px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Bahnschrift", "Trebuchet MS", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 10% 15%, rgba(226, 146, 59, 0.24), transparent 26%),
+                radial-gradient(circle at 86% 12%, rgba(15, 118, 110, 0.2), transparent 24%),
+                radial-gradient(circle at 78% 82%, rgba(190, 24, 93, 0.12), transparent 22%),
+                linear-gradient(135deg, #fff8ef 0%, #f4efe7 44%, #efe8de 100%);
+            overflow-x: hidden;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            filter: blur(24px);
+            opacity: 0.45;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::before {
+            top: -80px;
+            left: -90px;
+            background: rgba(201, 85, 25, 0.16);
+            animation: drift 13s ease-in-out infinite;
+        }
+
+        body::after {
+            right: -80px;
+            bottom: -110px;
+            background: rgba(15, 118, 110, 0.16);
+            animation: drift 15s ease-in-out infinite reverse;
+        }
+
+        .wrap {
+            position: relative;
+            z-index: 1;
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 32px 22px 42px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 24px;
+            animation: rise 0.7s ease forwards;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-mark {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, var(--accent), #ef8b4c);
+            color: #fff;
+            font-weight: 800;
+            box-shadow: 0 14px 32px rgba(201, 85, 25, 0.28);
+        }
+
+        .brand-copy strong {
+            display: block;
+            font-size: 15px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .brand-copy span {
+            display: block;
+            color: var(--muted);
+            font-size: 14px;
+            margin-top: 3px;
+        }
+
+        .address-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.76);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            color: var(--muted);
+            box-shadow: 0 10px 28px rgba(62, 45, 26, 0.08);
+        }
+
+        .address-pill code {
+            color: var(--accent-dark);
+            font-weight: 700;
+            background: transparent;
+            padding: 0;
+        }
+
+        .grid {
+            display: grid;
+            gap: 22px;
+            grid-template-columns: minmax(0, 1.03fr) minmax(360px, 0.97fr);
+        }
+
+        .stack {
+            display: grid;
+            gap: 22px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            padding: 24px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+            animation: rise 0.7s ease forwards;
+        }
+
+        .hero-panel {
+            padding: 28px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.74);
+            color: var(--accent-dark);
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 0;
+            max-width: 11ch;
+            font-family: "Georgia", "Times New Roman", serif;
+            font-size: clamp(3rem, 6vw, 5rem);
+            line-height: 0.95;
+            letter-spacing: -0.05em;
+        }
+
+        .gradient-word {
+            display: block;
+            background: linear-gradient(120deg, var(--accent-dark), var(--accent), #f59d63);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .hero-copy {
+            margin: 18px 0 0;
+            max-width: 58ch;
+            font-size: 18px;
+            line-height: 1.75;
+            color: var(--muted);
+        }
+
+        .hero-actions,
+        .quick-labels,
+        .labels-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .button {
+            appearance: none;
+            border: 0;
+            border-radius: 999px;
+            padding: 14px 20px;
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+        }
+
+        .button:hover {
+            transform: translateY(-1px);
+        }
+
+        .button:disabled {
+            opacity: 0.7;
+            cursor: wait;
+            transform: none;
+        }
+
+        .button-primary {
+            color: #fff;
+            background: linear-gradient(135deg, var(--accent), #ef8b4c);
+            box-shadow: 0 18px 34px rgba(201, 85, 25, 0.26);
+        }
+
+        .button-secondary {
+            color: var(--accent-dark);
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(201, 157, 121, 0.3);
+        }
+
+        .status-banner {
+            margin-top: 20px;
+            padding: 16px 18px;
+            border-radius: 18px;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.6;
+            background: rgba(255, 255, 255, 0.68);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+        }
+
+        .status-banner[data-tone="good"] {
+            color: var(--teal);
+            background: rgba(15, 118, 110, 0.08);
+            border-color: rgba(15, 118, 110, 0.18);
+        }
+
+        .status-banner[data-tone="warm"] {
+            color: var(--accent-dark);
+            background: rgba(201, 85, 25, 0.08);
+            border-color: rgba(201, 85, 25, 0.18);
+        }
+
+        .status-banner[data-tone="alert"] {
+            color: var(--rose);
+            background: rgba(190, 24, 93, 0.08);
+            border-color: rgba(190, 24, 93, 0.18);
+        }
+
+        .stats,
+        .status-grid,
+        .workflow,
+        .footer-notes {
+            display: grid;
+            gap: 14px;
+        }
+
+        .stats {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            margin-top: 24px;
+        }
+
+        .stat-card,
+        .chip-card,
+        .workflow-step,
+        .note-card {
+            border-radius: 22px;
+            background: var(--panel-strong);
+            border: 1px solid rgba(255, 255, 255, 0.78);
+            box-shadow: 0 12px 26px rgba(49, 35, 19, 0.08);
+        }
+
+        .stat-card {
+            position: relative;
+            overflow: hidden;
+            padding: 18px;
+        }
+
+        .stat-card::before {
+            content: "";
+            position: absolute;
+            inset: auto -16px -22px auto;
+            width: 86px;
+            height: 86px;
+            border-radius: 50%;
+            background: rgba(201, 85, 25, 0.08);
+        }
+
+        .stat-label {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .stat-value {
+            display: block;
+            margin-top: 10px;
+            font-size: clamp(1.55rem, 3vw, 2.15rem);
+            line-height: 1;
+            font-weight: 800;
+        }
+
+        .stat-note {
+            display: block;
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .status-grid,
+        .workflow,
+        .footer-notes {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-top: 22px;
+        }
+
+        .chip-card,
+        .note-card {
+            padding: 16px;
+        }
+
+        .chip-card small {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .signal {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 15px;
+            font-weight: 800;
+        }
+
+        .signal-dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            background: #d97706;
+            box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.45);
+            animation: pulse 2.2s infinite;
+        }
+
+        .signal.good .signal-dot {
+            background: var(--teal);
+            box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.4);
+        }
+
+        .signal.alert .signal-dot {
+            background: var(--rose);
+            box-shadow: 0 0 0 0 rgba(190, 24, 93, 0.42);
+        }
+
+        .stage-panel {
+            display: grid;
+            gap: 18px;
+            align-content: start;
+        }
+
+        .stage-topbar,
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            gap: 16px;
+        }
+
+        .stage-title,
+        .section-head h2 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 800;
+        }
+
+        .stage-subtitle,
+        .section-head p,
+        .workflow-step p {
+            color: var(--muted);
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .live-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.84);
+            border: 1px solid rgba(255, 255, 255, 0.75);
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--muted);
+        }
+
+        .stage-window {
+            position: relative;
+            overflow: hidden;
+            border-radius: 26px;
+            padding: 14px;
+            background: linear-gradient(145deg, rgba(18, 24, 39, 0.96), rgba(31, 41, 55, 0.94));
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+            min-height: 420px;
+        }
+
+        .stage-window img {
+            width: 100%;
+            display: block;
+            border-radius: 20px;
+            background: #111827;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+        }
+
+        .stage-overlay {
+            position: absolute;
+            left: 28px;
+            right: 28px;
+            bottom: 28px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .overlay-card {
+            min-width: 180px;
+            padding: 12px 14px;
+            border-radius: 18px;
+            background: rgba(11, 18, 32, 0.62);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+        }
+
+        .overlay-card strong {
+            display: block;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.68);
+        }
+
+        .overlay-card span {
+            display: block;
+            margin-top: 6px;
+            font-size: 16px;
+            font-weight: 800;
+            line-height: 1.5;
+        }
+
+        .collection-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        .field-row {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: minmax(0, 1fr) auto auto;
+        }
+
+        .text-input {
+            width: 100%;
+            border: 1px solid rgba(201, 157, 121, 0.42);
+            background: rgba(255, 255, 255, 0.92);
+            color: var(--text);
+            padding: 15px 18px;
+            border-radius: 18px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .text-input:focus {
+            border-color: rgba(201, 85, 25, 0.42);
+            box-shadow: 0 0 0 4px rgba(201, 85, 25, 0.1);
+        }
+
+        .label-pill {
+            border: 1px solid rgba(201, 157, 121, 0.34);
+            background: rgba(255, 255, 255, 0.92);
+            color: var(--text);
+            border-radius: 999px;
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.16s ease, background 0.16s ease;
+        }
+
+        .label-pill:hover {
+            transform: translateY(-1px);
+            background: rgba(201, 85, 25, 0.08);
+        }
+
+        .label-pill.empty {
+            cursor: default;
+            color: var(--muted);
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .workflow-step strong {
+            display: inline-grid;
+            place-items: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            margin-bottom: 12px;
+            background: var(--accent-soft);
+            color: var(--accent-dark);
+            font-size: 14px;
+        }
+
+        .workflow-step h3 {
+            margin: 0;
+            font-size: 17px;
+        }
+
+        code {
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: rgba(201, 85, 25, 0.1);
+            color: var(--accent-dark);
+            font-family: "Consolas", "Courier New", monospace;
+            font-size: 0.92em;
+        }
+
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes drift {
+            0%, 100% { transform: translateY(0) translateX(0); }
+            50% { transform: translateY(24px) translateX(18px); }
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(201, 85, 25, 0.36); }
+            70% { box-shadow: 0 0 0 12px rgba(201, 85, 25, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(201, 85, 25, 0); }
+        }
+
+        @media (max-width: 1080px) {
+            .grid,
+            .stats,
+            .status-grid,
+            .workflow,
+            .footer-notes {
+                grid-template-columns: 1fr;
+            }
+
+            .field-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 740px) {
+            .wrap { padding-inline: 14px; }
+
+            .topbar,
+            .stage-topbar,
+            .section-head {
+                flex-direction: column;
+                align-items: start;
+            }
+
+            .stage-window { min-height: 320px; }
+            .hero-panel,
+            .panel { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="topbar">
+            <div class="brand">
+                <div class="brand-mark">GL</div>
+                <div class="brand-copy">
+                    <strong>Gesture to Language</strong>
+                    <span>Local AI gesture recognition studio</span>
+                </div>
+            </div>
+            <div class="address-pill">
+                Browser app:
+                <code>http://127.0.0.1:5000</code>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="stack">
+                <section class="panel hero-panel">
+                    <div class="eyebrow">Computer vision + machine learning</div>
+                    <h1>
+                        Read
+                        <span class="gradient-word">hand gestures live</span>
+                    </h1>
+                    <p class="hero-copy">
+                        This dashboard turns your webcam into a local gesture recognition workspace.
+                        You can preview the camera, collect new samples, retrain the model, and test the
+                        result from one page without leaving the browser.
+                    </p>
+
+                    <div class="hero-actions">
+                        <button class="button button-primary" id="trainBtn">Retrain Model</button>
+                        <button class="button button-secondary" id="refreshBtn">Refresh Camera</button>
+                    </div>
+
+                    <div class="status-banner" id="status" data-tone="good">
+                        Server is ready. Open the live stage and test a gesture.
+                    </div>
+
+                    <div class="stats">
+                        <div class="stat-card">
+                            <span class="stat-label">Model Status</span>
+                            <span class="stat-value" id="modelReadyValue">Loading</span>
+                            <span class="stat-note" id="modelReadyNote">Checking model files...</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Gesture Labels</span>
+                            <span class="stat-value" id="labelCountValue">0</span>
+                            <span class="stat-note">How many gesture names the model can predict.</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Training Samples</span>
+                            <span class="stat-value" id="sampleCountValue">0</span>
+                            <span class="stat-note">Landmark samples currently available for training.</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Data Source</span>
+                            <span class="stat-value" id="datasetSourceValue">Local</span>
+                            <span class="stat-note" id="datasetSourceNote">Waiting for dataset info...</span>
+                        </div>
+                    </div>
+
+                    <div class="status-grid">
+                        <div class="chip-card">
+                            <small>Server</small>
+                            <div class="signal good" id="serverSignal">
+                                <span class="signal-dot"></span>
+                                <span>Online</span>
+                            </div>
+                        </div>
+                        <div class="chip-card">
+                            <small>Camera</small>
+                            <div class="signal" id="cameraSignal">
+                                <span class="signal-dot"></span>
+                                <span>Waiting for stream</span>
+                            </div>
+                        </div>
+                        <div class="chip-card">
+                            <small>Collection</small>
+                            <div class="signal" id="collectionSignal">
+                                <span class="signal-dot"></span>
+                                <span>Idle</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-head">
+                        <div>
+                            <h2>Collect New Samples</h2>
+                            <p>Give the gesture a name, collect examples from the live feed, then retrain the model.</p>
+                        </div>
+                    </div>
+
+                    <div class="collection-grid">
+                        <div class="field-row">
+                            <input class="text-input" id="labelInput" type="text" placeholder="Type a gesture label, for example: Peace or Thumbs_up">
+                            <button class="button button-primary" id="startCollectionBtn">Start Collecting</button>
+                            <button class="button button-secondary" id="stopCollectionBtn">Stop And Save</button>
+                        </div>
+
+                        <div class="status-banner" id="collectionStatus" data-tone="warm">
+                            Collection idle. Enter a label to begin.
+                        </div>
+
+                        <div>
+                            <small class="stat-label">Quick Labels</small>
+                            <div class="quick-labels" id="quickLabels">
+                                <button class="label-pill" data-label="Palm">Palm</button>
+                                <button class="label-pill" data-label="Fist">Fist</button>
+                                <button class="label-pill" data-label="Peace">Peace</button>
+                                <button class="label-pill" data-label="Thumbs_up">Thumbs_up</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-head">
+                        <div>
+                            <h2>How The Flow Works</h2>
+                            <p>The page is designed to keep the whole gesture-recognition loop simple and visible.</p>
+                        </div>
+                    </div>
+
+                    <div class="workflow">
+                        <article class="workflow-step">
+                            <strong>1</strong>
+                            <h3>Preview</h3>
+                            <p>Open the live stage and make sure the webcam can see your hand clearly with good lighting.</p>
+                        </article>
+                        <article class="workflow-step">
+                            <strong>2</strong>
+                            <h3>Collect</h3>
+                            <p>Type a label, start collecting, and hold the gesture in a few natural positions for better variety.</p>
+                        </article>
+                        <article class="workflow-step">
+                            <strong>3</strong>
+                            <h3>Train And Test</h3>
+                            <p>Retrain the model, then refresh the stream and immediately test how the new gesture is recognized.</p>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="section-head">
+                        <div>
+                            <h2>Known Gesture Labels</h2>
+                            <p>These labels come from the current trained model and can also be reused for new sample collection.</p>
+                        </div>
+                    </div>
+
+                    <div class="labels-cloud" id="labelsCloud">
+                        <span class="label-pill empty">Loading trained labels...</span>
+                    </div>
+                </section>
+            </div>
+
+            <div class="stack">
+                <section class="panel stage-panel">
+                    <div class="stage-topbar">
+                        <div>
+                            <h2 class="stage-title">Live Detection Stage</h2>
+                            <p class="stage-subtitle">The camera feed streams directly from the local Flask app. Gesture names appear on top of the video when a prediction is available.</p>
+                        </div>
+                        <div class="live-pill">
+                            <span class="signal-dot"></span>
+                            Live browser preview
+                        </div>
+                    </div>
+
+                    <div class="stage-window">
+                        <img id="videoFrame" src="/video_feed" alt="Live gesture detection stream">
+                        <div class="stage-overlay">
+                            <div class="overlay-card">
+                                <strong>Collection Mode</strong>
+                                <span id="overlayCollection">Idle</span>
+                            </div>
+                            <div class="overlay-card">
+                                <strong>Camera Hint</strong>
+                                <span id="overlayHint">Keep one hand inside the frame with clear lighting.</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="footer-notes">
+                        <div class="note-card">
+                            <strong style="color: var(--text);">Local and private</strong><br>
+                            The app runs on your machine at <code>127.0.0.1</code>, so testing stays local.
+                        </div>
+                        <div class="note-card">
+                            <strong style="color: var(--text);">Camera troubleshooting</strong><br>
+                            If the stage stays blank, close Zoom, Teams, or Camera and allow desktop camera access in Windows settings.
+                        </div>
+                        <div class="note-card">
+                            <strong style="color: var(--text);">Stopping the app</strong><br>
+                            Press <code>Ctrl + C</code> in the terminal window where <code>python web_app.py</code> is running.
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+    <script>
+        const statusEl = document.getElementById("status");
+        const trainBtn = document.getElementById("trainBtn");
+        const refreshBtn = document.getElementById("refreshBtn");
+        const labelInput = document.getElementById("labelInput");
+        const startCollectionBtn = document.getElementById("startCollectionBtn");
+        const stopCollectionBtn = document.getElementById("stopCollectionBtn");
+        const collectionStatusEl = document.getElementById("collectionStatus");
+        const labelsCloudEl = document.getElementById("labelsCloud");
+        const quickLabelsEl = document.getElementById("quickLabels");
+        const videoFrameEl = document.getElementById("videoFrame");
+        const cameraSignalEl = document.getElementById("cameraSignal");
+        const collectionSignalEl = document.getElementById("collectionSignal");
+        const overlayCollectionEl = document.getElementById("overlayCollection");
+        const overlayHintEl = document.getElementById("overlayHint");
+        const modelReadyValueEl = document.getElementById("modelReadyValue");
+        const modelReadyNoteEl = document.getElementById("modelReadyNote");
+        const labelCountValueEl = document.getElementById("labelCountValue");
+        const sampleCountValueEl = document.getElementById("sampleCountValue");
+        const datasetSourceValueEl = document.getElementById("datasetSourceValue");
+        const datasetSourceNoteEl = document.getElementById("datasetSourceNote");
+
+        function setBanner(message, tone = "good") {
+            statusEl.textContent = message;
+            statusEl.dataset.tone = tone;
+        }
+
+        function setCollectionBanner(message, tone = "warm") {
+            collectionStatusEl.textContent = message;
+            collectionStatusEl.dataset.tone = tone;
+        }
+
+        function setSignal(element, text, tone = "") {
+            element.className = tone ? `signal ${tone}` : "signal";
+            element.querySelector("span:last-child").textContent = text;
+        }
+
+        function formatNumber(value) {
+            return new Intl.NumberFormat().format(value || 0);
+        }
+
+        function renderLabels(labels) {
+            if (!labels || labels.length === 0) {
+                labelsCloudEl.innerHTML = '<span class="label-pill empty">No trained labels found yet.</span>';
+                return;
+            }
+
+            labelsCloudEl.innerHTML = labels
+                .map((label) => `<button class="label-pill" data-label="${label}">${label}</button>`)
+                .join("");
+        }
+
+        function renderQuickLabels(labels) {
+            const quick = labels && labels.length ? labels.slice(0, 8) : ["Palm", "Fist", "Peace", "Thumbs_up"];
+            quickLabelsEl.innerHTML = quick
+                .map((label) => `<button class="label-pill" data-label="${label}">${label}</button>`)
+                .join("");
+        }
+
+        function applyLabelClickHandlers() {
+            document.querySelectorAll("[data-label]").forEach((button) => {
+                button.onclick = () => {
+                    labelInput.value = button.dataset.label;
+                    labelInput.focus();
+                    setCollectionBanner(`Ready to collect samples for '${button.dataset.label}'.`, "warm");
+                };
+            });
+        }
+
+        async function refreshModelInfo() {
+            try {
+                const response = await fetch("/model-info");
+                const data = await response.json();
+
+                modelReadyValueEl.textContent = data.model_available ? "Ready" : "Missing";
+                modelReadyNoteEl.textContent = data.model_available
+                    ? "A trained model is loaded for live prediction."
+                    : "No trained model is ready yet. Collect data and retrain.";
+                labelCountValueEl.textContent = formatNumber(data.label_count);
+                sampleCountValueEl.textContent = formatNumber(data.training_sample_count);
+                datasetSourceValueEl.textContent = data.dataset_title;
+                datasetSourceNoteEl.textContent = `Training folder: ${data.training_data_dir}`;
+
+                renderLabels(data.labels);
+                renderQuickLabels(data.labels);
+                applyLabelClickHandlers();
+            } catch (error) {
+                modelReadyValueEl.textContent = "Error";
+                modelReadyNoteEl.textContent = "Unable to read model details from the server.";
+            }
+        }
+
+        async function refreshCollectionStatus() {
+            try {
+                const response = await fetch("/collection/status");
+                const data = await response.json();
+                if (data.active) {
+                    const message = `Collecting '${data.label}' - ${data.count} samples captured so far.`;
+                    setCollectionBanner(message, "good");
+                    setSignal(collectionSignalEl, `Collecting ${data.label}`, "good");
+                    overlayCollectionEl.textContent = `${data.label} (${data.count} samples)`;
+                } else if (data.last_message) {
+                    const tone = data.last_message.toLowerCase().includes("no samples") ? "alert" : "warm";
+                    setCollectionBanner(data.last_message, tone);
+                    setSignal(collectionSignalEl, "Idle", "");
+                    overlayCollectionEl.textContent = "Idle";
+                } else {
+                    setCollectionBanner("Collection idle.", "warm");
+                    setSignal(collectionSignalEl, "Idle", "");
+                    overlayCollectionEl.textContent = "Idle";
+                }
+            } catch (error) {
+                setCollectionBanner("Unable to read collection status.", "alert");
+                setSignal(collectionSignalEl, "Unavailable", "alert");
+                overlayCollectionEl.textContent = "Unavailable";
+            }
+        }
+
+        function refreshVideoFrame() {
+            videoFrameEl.src = `/video_feed?ts=${Date.now()}`;
+            setSignal(cameraSignalEl, "Refreshing stream", "");
+            overlayHintEl.textContent = "Refreshing the camera stream...";
+        }
+
+        trainBtn.addEventListener("click", async () => {
+            trainBtn.disabled = true;
+            trainBtn.textContent = "Training...";
+            setBanner("Training the model now. This can take a little while.", "warm");
+            try {
+                const response = await fetch("/train", { method: "POST" });
+                const data = await response.json();
+                if (!response.ok) {
+                    setBanner(data.message || "Training failed.", "alert");
+                } else {
+                    setBanner(data.message, "good");
+                    await refreshModelInfo();
+                    refreshVideoFrame();
+                }
+            } catch (error) {
+                setBanner("Training failed. Check the terminal for more details.", "alert");
+            } finally {
+                trainBtn.disabled = false;
+                trainBtn.textContent = "Retrain Model";
+            }
+        });
+
+        startCollectionBtn.addEventListener("click", async () => {
+            const label = labelInput.value.trim();
+            if (!label) {
+                setCollectionBanner("Enter a gesture label first.", "alert");
+                return;
+            }
+
+            startCollectionBtn.disabled = true;
+            try {
+                const response = await fetch("/collection/start", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ label })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    setCollectionBanner(data.message || "Could not start collection.", "alert");
+                } else {
+                    setCollectionBanner(data.message, "good");
+                }
+            } catch (error) {
+                setCollectionBanner("Could not start collection.", "alert");
+            } finally {
+                startCollectionBtn.disabled = false;
+                refreshCollectionStatus();
+            }
+        });
+
+        stopCollectionBtn.addEventListener("click", async () => {
+            stopCollectionBtn.disabled = true;
+            try {
+                const response = await fetch("/collection/stop", { method: "POST" });
+                const data = await response.json();
+                const tone = data.message && data.message.toLowerCase().includes("saved") ? "good" : "warm";
+                setCollectionBanner(data.message || "Collection stopped.", tone);
+                await refreshModelInfo();
+            } catch (error) {
+                setCollectionBanner("Could not stop collection.", "alert");
+            } finally {
+                stopCollectionBtn.disabled = false;
+                refreshCollectionStatus();
+            }
+        });
+
+        refreshBtn.addEventListener("click", () => {
+            refreshVideoFrame();
+            setBanner("Camera stream refreshed.", "good");
+        });
+
+        videoFrameEl.addEventListener("load", () => {
+            setSignal(cameraSignalEl, "Live feed connected", "good");
+            overlayHintEl.textContent = "Hold your hand inside the frame and keep a little space around it.";
+        });
+
+        videoFrameEl.addEventListener("error", () => {
+            setSignal(cameraSignalEl, "Camera unavailable", "alert");
+            overlayHintEl.textContent = "The stream could not load. Close other webcam apps and refresh.";
+        });
+
+        refreshModelInfo();
+        refreshCollectionStatus();
+        applyLabelClickHandlers();
+        setInterval(refreshCollectionStatus, 1000);
+    </script>
+</body>
+</html>

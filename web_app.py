@@ -288,7 +288,7 @@ def train():
     with _model_lock:
         _model_cache["model"] = None
         _model_cache["label_encoder"] = None
-    return jsonify({"message": message})
+    return jsonify({"message": message, "model": get_model_metadata()})
 
 
 @app.get("/collection/status")
@@ -308,6 +308,11 @@ def collection_start():
 def collection_stop():
     message = stop_collection()
     return jsonify({"message": message, **collection_status_payload()})
+
+
+@app.get("/model-info")
+def model_info():
+    return jsonify(get_model_metadata())
 
 
 @app.get("/health")
