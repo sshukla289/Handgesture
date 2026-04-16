@@ -1,5 +1,6 @@
 import os
 import urllib.request
+from threading import Lock
 
 import cv2
 import mediapipe as mp
@@ -9,6 +10,8 @@ HAND_LANDMARKER_URL = (
     "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 )
 HAND_LANDMARKER_PATH = os.path.join("model", "hand_landmarker.task")
+_landmarker_lock = Lock()
+_landmarker_cache = {}
 
 
 def ensure_hand_landmarker_model():
@@ -19,16 +22,23 @@ def ensure_hand_landmarker_model():
 
 
 def create_hand_landmarker(num_hands=2):
-    model_path = os.path.abspath(ensure_hand_landmarker_model())
-    options = mp.tasks.vision.HandLandmarkerOptions(
-        base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
-        running_mode=mp.tasks.vision.RunningMode.VIDEO,
-        num_hands=num_hands,
-        min_hand_detection_confidence=0.5,
-        min_hand_presence_confidence=0.5,
-        min_tracking_confidence=0.5,
-    )
-    return mp.tasks.vision.HandLandmarker.create_from_options(options)
+    with _landmarker_lock:
+        cached_landmarker = _landmarker_cache.get(num_hands)
+        if cached_landmarker is not None:
+            return cached_landmarker
+
+        model_path = os.path.abspath(ensure_hand_landmarker_model())
+        options = mp.tasks.vision.HandLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
+            running_mode=mp.tasks.vision.RunningMode.VIDEO,
+            num_hands=num_hands,
+            min_hand_detection_confidence=0.5,
+            min_hand_presence_confidence=0.5,
+            min_tracking_confidence=0.5,
+        )
+        landmarker = mp.tasks.vision.HandLandmarker.create_from_options(options)
+        _landmarker_cache[num_hands] = landmarker
+        return landmarker
 
 
 def detect_hands(landmarker, frame, timestamp_ms):
