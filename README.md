@@ -33,8 +33,11 @@ You do not need to understand coding to use the browser version once it is set u
 
 - live hand gesture detection through webcam
 - browser-based interface
+- on-camera prediction overlay for the current gesture and confidence
+- fullscreen camera mode with an in-view exit button
 - collect new gesture samples from the same page
 - train the model again after collecting new samples
+- clear the selected dataset directly from the dashboard
 - saved trained model for later use
 
 ## Tech Stack
@@ -164,8 +167,10 @@ http://127.0.0.1:5000
 1. Start the app with `python web_app.py`
 2. Open `http://127.0.0.1:5000`
 3. Allow the webcam if Windows asks
-4. Show one of the trained hand gestures to the camera
-5. The project will try to display the gesture name
+4. Click `Start Camera`
+5. Show one of the trained hand gestures to the camera
+6. Watch the live prediction overlay on the camera feed
+7. Use `Fullscreen` if you want a larger camera view
 
 ### To add your own new gesture
 
@@ -223,6 +228,15 @@ These look similar to people, but the computer treats them as different labels.
 - `datasets/`: user-collected gesture CSV files
 - `datasets_leapgestrecog/`: converted landmark CSV files from the imported Kaggle dataset
 
+## Browser Dashboard Tips
+
+- `Start Camera`: starts the live webcam stream in the browser
+- `Fullscreen`: expands the camera panel; use `Exit Fullscreen` inside the camera view to leave fullscreen mode
+- live prediction banner: shows the current gesture directly on top of the camera feed
+- `Start Collecting` and `Stop and Save`: capture new gesture samples from the dashboard
+- `Train Model`: retrains the saved gesture model from the selected training source
+- `Clear Dataset`: removes CSV files from the currently selected training source
+
 ## Common Problems And Easy Fixes
 
 ### Camera is not working
@@ -245,6 +259,7 @@ On Windows, check:
 - make sure your hand is clearly visible
 - keep good lighting
 - move your hand slightly back from the camera
+- click `Start Camera` and wait for the live feed to begin
 - try gestures that are already part of the trained model
 
 ### Training does not work
@@ -293,4 +308,3 @@ The easiest way to use it is:
 2. run `python web_app.py`
 3. open `http://127.0.0.1:5000`
 4. show your hand gesture to the webcam
-

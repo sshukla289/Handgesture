@@ -3,174 +3,259 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gesture to Language</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Gesture to Language Converter</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v=asset_version) }}">
 </head>
 <body>
-    <div class="page-shell">
+    <div class="app-shell">
         <header class="topbar">
-            <div>
-                <p class="eyebrow">Gesture to Language</p>
-                <h1>Recognition Workspace</h1>
-                <p class="intro">
-                    Live hand-gesture recognition, data collection, and model training powered by your Flask backend.
-                </p>
+            <div class="brand-block">
+                <p class="eyebrow">Gesture to Language Converter</p>
+                <h1>Realtime Gesture Tracking</h1>
             </div>
-            <div class="status-chip" id="connectionStatus">Backend online</div>
+            <div class="header-actions">
+                <button class="button button-danger button-header" id="clearDatasetBtn" type="button">
+                    <span class="button-icon button-icon-danger" aria-hidden="true">!</span>
+                    <span>Clear Dataset</span>
+                </button>
+            </div>
         </header>
 
-        <main class="layout">
-            <section class="card card-camera">
-                <div class="card-head">
-                    <div>
-                        <h2>Live Camera</h2>
-                        <p>Start the stream to run MediaPipe detection and SVM prediction in real time.</p>
-                    </div>
-                    <div class="action-row">
-                        <button class="button button-secondary" id="startCameraBtn" type="button">Start Camera</button>
-                        <button class="button button-ghost" id="stopCameraBtn" type="button" disabled>Stop Camera</button>
-                    </div>
-                </div>
-
-                <div class="camera-shell" id="cameraShell" data-state="idle">
-                    <img id="cameraFeed" alt="Live webcam stream">
-                    <div class="camera-overlay" id="cameraOverlay">
-                        <strong>Camera is off</strong>
-                        <span>Start the camera to begin recognition.</span>
-                    </div>
-                </div>
-
-                <div class="meta-grid">
-                    <div class="metric">
-                        <span class="metric-label">Stream</span>
-                        <strong id="cameraStateValue">Stopped</strong>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Model Status</span>
-                        <strong id="modelStatusValue">Checking</strong>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Samples</span>
-                        <strong id="samplesValue">0</strong>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-label">Labels</span>
-                        <strong id="labelsValue">0</strong>
-                    </div>
-                </div>
-            </section>
-
-            <section class="stack">
-                <section class="card">
-                    <div class="card-head">
-                        <div>
-                            <h2>Prediction Output</h2>
-                            <p>Every value below comes from the live backend prediction endpoint.</p>
+        <main class="dashboard-grid">
+            <div class="left-stack">
+                <section class="panel camera-panel">
+                    <div class="panel-head">
+                        <div class="camera-heading">
+                            <p class="section-tag">Live Recognition</p>
+                            <h2>Camera and prediction</h2>
+                        </div>
+                        <div class="action-row camera-actions">
+                            <button class="button button-primary button-compact" id="startCameraBtn" type="button">Start Camera</button>
+                            <button class="button button-secondary button-compact" id="fullscreenCameraBtn" type="button">Fullscreen</button>
+                            <button class="button button-secondary button-compact" id="stopCameraBtn" type="button" disabled>Stop Camera</button>
                         </div>
                     </div>
 
-                    <div class="prediction-panel">
-                        <div>
-                            <span class="metric-label">Current Gesture</span>
-                            <div class="prediction-label" id="predictionLabel">No prediction</div>
+                    <div class="camera-shell" id="cameraShell" data-state="idle">
+                        <img id="cameraFeed" alt="">
+                        <button class="button button-secondary button-compact camera-exit-fullscreen hidden" id="exitFullscreenCameraBtn" type="button">
+                            Exit Fullscreen
+                        </button>
+                        <div class="camera-hud">
+                            <div class="hud-chip" id="streamHudChip" data-live="false">Standby</div>
+                            <div class="hud-chip" id="predictionHudChip">Prediction idle</div>
                         </div>
-                        <div>
-                            <span class="metric-label">Confidence</span>
-                            <div class="prediction-confidence" id="predictionConfidence">--</div>
+                        <div class="camera-prediction hidden" id="cameraPredictionOverlay" aria-live="polite">
+                            <span class="camera-prediction-label" id="cameraPredictionLabel">No prediction</span>
+                            <span class="camera-prediction-meta" id="cameraPredictionMeta">Waiting for gesture</span>
                         </div>
-                        <div>
-                            <span class="metric-label">Last Updated</span>
-                            <div class="subtle-text" id="predictionTimestamp">Waiting for data</div>
+                        <div class="camera-overlay" id="cameraOverlay">
+                            <strong>Camera offline</strong>
+                            <span>Start the stream to begin hand tracking and live gesture prediction.</span>
+                        </div>
+                    </div>
+
+                    <div class="camera-alert hidden" id="cameraAlert" role="status" aria-live="polite">
+                        Gesture is already used by the trained model. Choose a new gesture label before collecting samples.
+                    </div>
+
+                    <div class="prediction-bar">
+                        <div class="prediction-main">
+                            <span class="mini-label">Current gesture</span>
+                            <strong class="prediction-value" id="predictionLabel">No prediction</strong>
+                            <span class="prediction-copy" id="predictionSummary">Predictions will appear here once the live stream starts.</span>
+                        </div>
+                        <div class="prediction-meta">
+                            <div class="info-block">
+                                <span class="mini-label">Confidence</span>
+                                <strong id="predictionConfidence">--</strong>
+                            </div>
+                            <div class="info-block">
+                                <span class="mini-label">Last update</span>
+                                <strong id="predictionTimestamp">Waiting for data</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-row">
+                        <div class="stat-pill">
+                            <span class="mini-label">Stream</span>
+                            <strong id="cameraStateValue">Offline</strong>
+                            <span id="cameraStatusMeta">Camera standby</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="mini-label">Model</span>
+                            <strong id="modelStatusValue">Checking</strong>
+                            <span id="modelStatusMeta">Waiting for bootstrap</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="mini-label">Samples</span>
+                            <strong id="samplesValue">0</strong>
+                            <span id="samplesMeta">Current dataset</span>
+                        </div>
+                        <div class="stat-pill">
+                            <span class="mini-label">Labels</span>
+                            <strong id="labelsValue">0</strong>
+                            <span id="labelsMeta">Ready for inference</span>
                         </div>
                     </div>
                 </section>
 
-                <section class="card">
-                    <div class="card-head">
+                <section class="panel note-panel" id="noteSection">
+                    <div class="panel-head panel-head-compact">
                         <div>
-                            <h2>Training</h2>
-                            <p>Trigger model training directly from the backend and monitor real status.</p>
+                            <p class="section-tag">Note</p>
+                            <h2>Dataset rules</h2>
                         </div>
                     </div>
+                    <div class="note-list">
+                        <p id="datasetRuleNote">A gesture that is already used by the trained model cannot be collected again as a new sample.</p>
+                        <p>The <strong>Clear Dataset</strong> button permanently removes all CSV dataset files from the currently selected training source.</p>
+                    </div>
+                </section>
+            </div>
 
-                    <div class="status-row">
-                        <div class="status-pill" id="trainingStatusPill">Idle</div>
-                        <span class="subtle-text" id="trainingMessage">Training idle.</span>
+            <aside class="side-stack">
+                <section class="panel training-panel">
+                    <div class="panel-head panel-head-compact">
+                        <div>
+                            <p class="section-tag">Training</p>
+                        </div>
+                        <div class="status-pill" id="trainingStatusPill" data-tone="idle">Idle</div>
                     </div>
 
-                    <div class="training-meta">
-                        <div class="metric">
-                            <span class="metric-label">Collected Samples</span>
+                    <div class="training-summary">
+                        <strong id="trainingMessage">Training idle. Start a run when your samples are ready.</strong>
+                        <span id="trainingRefreshState">Model ready for live inference</span>
+                    </div>
+
+                    <div class="progress-track" aria-hidden="true">
+                        <div class="progress-fill" id="trainingProgressFill"></div>
+                    </div>
+
+                    <div class="training-meta-line">
+                        <span id="trainingStageValue">Idle</span>
+                        <span id="trainingElapsedValue">0.0s</span>
+                        <span id="trainingProgressValue">0%</span>
+                    </div>
+
+                    <label class="field field-select" for="trainingSourceSelect">
+                        <span class="field-label">Training source</span>
+                        <select class="select-input" id="trainingSourceSelect"></select>
+                    </label>
+
+                    <div class="stack-actions">
+                        <button class="button button-primary button-wide" id="trainModelBtn" type="button">
+                            <span class="spinner hidden" id="trainSpinner"></span>
+                            <span id="trainButtonText">Train Model</span>
+                        </button>
+                    </div>
+
+                    <div class="mini-stats">
+                        <div class="mini-stat">
+                            <span class="mini-label">Source</span>
+                            <strong id="trainingSourceValue">Auto Select</strong>
+                        </div>
+                        <div class="mini-stat">
+                            <span class="mini-label">Samples</span>
                             <strong id="trainingSamplesValue">0</strong>
                         </div>
-                        <div class="metric">
-                            <span class="metric-label">Available Labels</span>
+                        <div class="mini-stat">
+                            <span class="mini-label">Labels</span>
                             <strong id="trainingLabelsValue">0</strong>
                         </div>
+                        <div class="mini-stat">
+                            <span class="mini-label">CSV files</span>
+                            <strong id="trainingCsvValue">0</strong>
+                        </div>
+                        <div class="mini-stat">
+                            <span class="mini-label">Accuracy</span>
+                            <strong id="trainingAccuracyValue">--</strong>
+                        </div>
                     </div>
 
-                    <button class="button button-primary button-wide" id="trainModelBtn" type="button">
-                        <span class="spinner hidden" id="trainSpinner"></span>
-                        <span id="trainButtonText">Train Model</span>
-                    </button>
+                    <div class="hidden-cluster" aria-hidden="true">
+                        <span id="trainingStageSummary">Idle</span>
+                        <div id="trainingSourceChip"></div>
+                        <div id="trainingStepList"></div>
+                    </div>
                 </section>
 
-                <section class="card">
-                    <div class="card-head">
+                <section class="panel collection-panel">
+                    <div class="panel-head panel-head-compact">
                         <div>
-                            <h2>Data Collection</h2>
-                            <p>Collect gesture landmarks from the same live stream and save them to CSV.</p>
+                            <p class="section-tag">Collection</p>
+                            <h2>Capture samples</h2>
                         </div>
+                        <div class="status-pill" id="collectionStatusChip" data-tone="idle">Idle</div>
                     </div>
 
-                    <label class="field-label" for="gestureNameInput">Enter Gesture Name</label>
-                    <input class="text-input" id="gestureNameInput" type="text" placeholder="e.g. Thumbs_up">
+                    <label class="field" for="gestureNameInput">
+                        <span class="field-label">Gesture label</span>
+                        <input class="text-input" id="gestureNameInput" type="text" placeholder="e.g. Thumbs_up" autocomplete="off">
+                    </label>
 
-                    <div class="action-row">
+                    <div class="action-row action-row-stretch">
                         <button class="button button-primary" id="startCollectBtn" type="button">Start Collecting</button>
-                        <button class="button button-secondary" id="stopCollectBtn" type="button">Stop &amp; Save</button>
+                        <button class="button button-secondary" id="stopCollectBtn" type="button" disabled>Stop and Save</button>
                     </div>
 
-                    <div class="meta-grid meta-grid-collection">
-                        <div class="metric">
-                            <span class="metric-label">Collection Status</span>
+                    <p class="section-copy" id="collectionSummary">Prepare the camera, enter a label, and start recording landmarks.</p>
+
+                    <div class="mini-stats mini-stats-collection">
+                        <div class="mini-stat">
+                            <span class="mini-label">Status</span>
                             <strong id="collectionStatusValue">Idle</strong>
                         </div>
-                        <div class="metric">
-                            <span class="metric-label">Current Gesture</span>
+                        <div class="mini-stat">
+                            <span class="mini-label">Gesture</span>
                             <strong id="currentGestureValue">--</strong>
                         </div>
-                        <div class="metric">
-                            <span class="metric-label">Current Samples</span>
+                        <div class="mini-stat">
+                            <span class="mini-label">Samples</span>
                             <strong id="currentGestureSamplesValue">0</strong>
                         </div>
                     </div>
                 </section>
-            </section>
 
-            <section class="card card-log">
-                <div class="card-head">
-                    <div>
-                        <h2>Recognition Log</h2>
-                        <p>Most recent predictions from the backend history.</p>
-                    </div>
-                </div>
-
-                <div class="log-table">
-                    <div class="log-table-head">
-                        <span>Gesture</span>
-                        <span>Confidence</span>
-                        <span>Timestamp</span>
-                    </div>
-                    <div class="log-list" id="recognitionLog">
-                        <div class="empty-state">No recognition events yet.</div>
-                    </div>
-                </div>
-            </section>
+            </aside>
         </main>
+
+        <section class="panel log-panel" id="logPanel" data-collapsed="false">
+            <div class="panel-head panel-head-compact">
+                <div>
+                    <p class="section-tag">Recognition Log</p>
+                    <h2>Recent activity</h2>
+                </div>
+                <div class="log-tools">
+                    <div class="log-caption" id="logCaption">Waiting for events</div>
+                    <button
+                        class="button button-collapse"
+                        id="logCollapseBtn"
+                        type="button"
+                        aria-expanded="true"
+                        aria-controls="logTable"
+                        aria-label="Collapse recent activity"
+                    >
+                        <span class="collapse-icon" aria-hidden="true">‹</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="log-table" id="logTable">
+                <div class="log-table-head">
+                    <span>Gesture</span>
+                    <span>Confidence</span>
+                    <span>Timestamp</span>
+                </div>
+                <div class="log-list" id="recognitionLog">
+                    <div class="empty-state">
+                        <strong>No recognition events yet</strong>
+                        <span>Start the camera and show a gesture to build the live feed history.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
 
     <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>

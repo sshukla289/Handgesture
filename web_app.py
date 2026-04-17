@@ -2,7 +2,7 @@ import csv
 import os
 import time
 from collections import deque
-from threading import Lock
+from threading import Lock, Thread
 
 import cv2
 import joblib
@@ -13,13 +13,13 @@ from hand_tracking import create_hand_landmarker, detect_hands, draw_hand_landma
 from train_model import resolve_training_data_dir, train_model
 
 app = Flask(__name__)
-app.config["TEMPLATES_AUTO_RELOAD"] = False
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
-app.jinja_env.auto_reload = False
+app.jinja_env.auto_reload = True
 
 _camera_lock = Lock()
 _model_lock = Lock()
-_model_cache = {"model": None, "label_encoder": None}
+_model_cache = {"model": None, "label_encoder": None, "version": 0}
 _metadata_lock = Lock()
 _metadata_cache = None
 _prediction_lock = Lock()
@@ -42,8 +42,18 @@ _training_lock = Lock()
 _training_state = {
     "status": "idle",
     "message": "Training idle.",
+    "stage": "idle",
+    "progress": 0.0,
     "last_started_at": None,
     "last_completed_at": None,
+    "source_key": "auto",
+    "source_title": "Auto Select",
+    "resolved_source_key": "auto",
+    "resolved_source_title": "Auto Select",
+    "samples": 0,
+    "classes": 0,
+    "accuracy": None,
+    "csv_files": 0,
 }
 _training_source_options = {
     "auto": {
@@ -87,6 +97,18 @@ def load_model():
         return _model_cache["model"], _model_cache["label_encoder"]
 
 
+def invalidate_loaded_model():
+    with _model_lock:
+        _model_cache["model"] = None
+        _model_cache["label_encoder"] = None
+        _model_cache["version"] += 1
+
+
+def current_model_version():
+    with _model_lock:
+        return _model_cache["version"]
+
+
 def invalidate_model_metadata_cache():
     global _metadata_cache
     with _metadata_lock:
@@ -102,11 +124,13 @@ def get_dataset_title(training_data_dir):
 def summarize_dataset_dir(data_dir, title, key):
     sample_count = 0
     csv_count = 0
+    label_count = 0
     available = False
 
     if os.path.isdir(data_dir):
         csv_files = [file for file in os.listdir(data_dir) if file.endswith(".csv")]
         csv_count = len(csv_files)
+        label_count = csv_count
         available = csv_count > 0
         for file_name in csv_files:
             file_path = os.path.join(data_dir, file_name)
@@ -122,6 +146,7 @@ def summarize_dataset_dir(data_dir, title, key):
         "training_data_dir": data_dir,
         "sample_count": sample_count,
         "csv_file_count": csv_count,
+        "label_count": label_count,
         "available": available,
     }
 
@@ -150,6 +175,10 @@ def resolve_requested_training_dir(source_key):
     option = _training_source_options[normalized]
     training_data_dir = resolve_training_data_dir(option["data_dir"])
     return normalized, training_data_dir
+
+
+def training_source_title(source_key):
+    return _training_source_options.get(source_key, _training_source_options["auto"])["title"]
 
 
 def get_model_metadata():
@@ -274,14 +303,34 @@ def safe_label_name(label):
     return sanitized.strip("_") or "gesture"
 
 
+def normalized_label_key(label):
+    return safe_label_name(label).lower()
+
+
+def find_trained_label_conflict(label):
+    candidate_key = normalized_label_key(label)
+    for existing_label in get_model_metadata().get("labels", []):
+        if normalized_label_key(existing_label) == candidate_key:
+            return str(existing_label)
+    return None
+
+
 def start_collection(label):
     clean_label = label.strip()
     if not clean_label:
-        return False, "Gesture label is required."
+        return False, "Gesture label is required.", "missing_label"
+
+    conflicting_label = find_trained_label_conflict(clean_label)
+    if conflicting_label:
+        return (
+            False,
+            f"Gesture '{conflicting_label}' is already used by the trained model. Choose a new gesture label.",
+            "duplicate_trained_label",
+        )
 
     with _collection_lock:
         if _collection_state["active"]:
-            return False, f"Collection is already running for '{_collection_state['label']}'. Stop it first."
+            return False, f"Collection is already running for '{_collection_state['label']}'. Stop it first.", "collection_active"
 
         _collection_state["active"] = True
         _collection_state["label"] = clean_label
@@ -290,7 +339,7 @@ def start_collection(label):
         _collection_state["count"] = 0
         _collection_state["last_message"] = f"Collecting '{clean_label}'. Keep your gesture visible in the camera."
 
-    return True, _collection_state["last_message"]
+    return True, _collection_state["last_message"], None
 
 
 def stop_collection():
@@ -337,19 +386,71 @@ def collection_status_payload():
         }
 
 
-def set_training_state(status, message):
+def clear_training_dataset(source_key):
+    normalized_source_key, training_data_dir = resolve_requested_training_dir(source_key)
+
+    with _collection_lock:
+        if _collection_state["active"]:
+            raise RuntimeError("Stop sample collection before clearing the dataset.")
+
     with _training_lock:
+        if _training_state["status"] == "training":
+            raise RuntimeError("Wait for training to finish before clearing the dataset.")
+
+    deleted_files = 0
+    if os.path.isdir(training_data_dir):
+        for file_name in os.listdir(training_data_dir):
+            if not file_name.endswith(".csv"):
+                continue
+            file_path = os.path.join(training_data_dir, file_name)
+            try:
+                os.remove(file_path)
+                deleted_files += 1
+            except OSError:
+                continue
+
+    invalidate_model_metadata_cache()
+
+    resolved_title = get_dataset_title(training_data_dir)
+    return {
+        "source_key": normalized_source_key,
+        "resolved_source_title": resolved_title,
+        "deleted_files": deleted_files,
+        "message": (
+            f"Cleared {deleted_files} dataset files from {resolved_title}."
+            if deleted_files
+            else f"No dataset files were found in {resolved_title}."
+        ),
+    }
+
+
+def set_training_state(status, message, **updates):
+    with _training_lock:
+        previous_status = _training_state["status"]
         _training_state["status"] = status
         _training_state["message"] = message
-        if status == "training":
+        if status == "training" and previous_status != "training":
             _training_state["last_started_at"] = time.time()
+            _training_state["last_completed_at"] = None
         if status in {"completed", "failed"}:
             _training_state["last_completed_at"] = time.time()
+        for key, value in updates.items():
+            if value is not None or key in {"accuracy"}:
+                _training_state[key] = value
 
 
 def training_status_payload():
     with _training_lock:
-        return dict(_training_state)
+        payload = dict(_training_state)
+
+    started_at = payload.get("last_started_at")
+    completed_at = payload.get("last_completed_at")
+    elapsed_seconds = 0.0
+    if started_at:
+        elapsed_seconds = (time.time() - started_at) if payload["status"] == "training" else max((completed_at or started_at) - started_at, 0.0)
+
+    payload["elapsed_seconds"] = round(elapsed_seconds, 1)
+    return payload
 
 
 def stats_payload():
@@ -363,26 +464,128 @@ def stats_payload():
         "model_status": "trained" if metadata["model_available"] else "not_trained",
         "training_status": training["status"],
         "training_message": training["message"],
+        "training_stage": training["stage"],
+        "training_progress": training["progress"],
+        "training_elapsed_seconds": training["elapsed_seconds"],
+        "training_source_key": training["source_key"],
+        "training_source_title": training["resolved_source_title"],
+        "training_requested_source_title": training["source_title"],
+        "training_accuracy": training["accuracy"],
+        "training_csv_files": training["csv_files"],
         "current_gesture": collection["label"],
         "current_gesture_samples": collection["count"],
         "collection_active": collection["active"],
     }
 
 
-def train_model_for_ui(source_key="auto"):
-    _, training_data_dir = resolve_requested_training_dir(source_key)
-    summary = train_model(data_dir=training_data_dir)
+def train_model_for_ui(source_key="auto", progress_callback=None):
+    normalized_source_key, training_data_dir = resolve_requested_training_dir(source_key)
+    resolved_source_key = "imported" if training_data_dir == "datasets_leapgestrecog" else "custom"
+    summary = train_model(data_dir=training_data_dir, progress_callback=progress_callback)
     dataset_title = get_dataset_title(training_data_dir)
 
     if summary["accuracy"] is None:
-        return (
+        message = (
             f"Model training completed from {dataset_title} with {summary['samples']} samples "
             f"across {summary['classes']} labels. Add more data for an accuracy score."
         )
-    return (
-        f"Model training completed from {dataset_title} with {summary['accuracy'] * 100:.2f}% "
-        f"accuracy using {summary['samples']} samples across {summary['classes']} labels."
+    else:
+        message = (
+            f"Model training completed from {dataset_title} with {summary['accuracy'] * 100:.2f}% "
+            f"accuracy using {summary['samples']} samples across {summary['classes']} labels."
+        )
+
+    return {
+        "message": message,
+        "summary": summary,
+        "source_key": normalized_source_key,
+        "source_title": training_source_title(normalized_source_key),
+        "resolved_source_key": resolved_source_key,
+        "resolved_source_title": dataset_title,
+    }
+
+
+def launch_training_job(source_key="auto"):
+    normalized_source_key, training_data_dir = resolve_requested_training_dir(source_key)
+    resolved_source_key = "imported" if training_data_dir == "datasets_leapgestrecog" else "custom"
+    set_training_state(
+        "training",
+        "Preparing the training pipeline.",
+        stage="queued",
+        progress=0.03,
+        source_key=normalized_source_key,
+        source_title=training_source_title(normalized_source_key),
+        resolved_source_key=resolved_source_key,
+        resolved_source_title=get_dataset_title(training_data_dir),
+        samples=0,
+        classes=0,
+        accuracy=None,
+        csv_files=0,
     )
+
+    def run_job():
+        try:
+            def handle_progress(update):
+                set_training_state(
+                    "training",
+                    update.get("message", "Training in progress."),
+                    stage=update.get("stage", "training"),
+                    progress=round(float(update.get("progress", 0.0)), 2),
+                    source_key=normalized_source_key,
+                    source_title=training_source_title(normalized_source_key),
+                    resolved_source_key=resolved_source_key,
+                    resolved_source_title=get_dataset_title(training_data_dir),
+                    samples=update.get("samples"),
+                    classes=update.get("classes"),
+                    accuracy=update.get("accuracy"),
+                    csv_files=update.get("csv_files"),
+                )
+
+            training_result = train_model_for_ui(normalized_source_key, progress_callback=handle_progress)
+            summary = training_result["summary"]
+
+            set_training_state(
+                "training",
+                "Refreshing the live model cache.",
+                stage="refreshing",
+                progress=0.99,
+                source_key=training_result["source_key"],
+                source_title=training_result["source_title"],
+                resolved_source_key=training_result["resolved_source_key"],
+                resolved_source_title=training_result["resolved_source_title"],
+                samples=summary["samples"],
+                classes=summary["classes"],
+                accuracy=summary["accuracy"],
+                csv_files=summary["csv_files"],
+            )
+            invalidate_loaded_model()
+            invalidate_model_metadata_cache()
+            load_model()
+            set_training_state(
+                "completed",
+                training_result["message"],
+                stage="completed",
+                progress=1.0,
+                source_key=training_result["source_key"],
+                source_title=training_result["source_title"],
+                resolved_source_key=training_result["resolved_source_key"],
+                resolved_source_title=training_result["resolved_source_title"],
+                samples=summary["samples"],
+                classes=summary["classes"],
+                accuracy=summary["accuracy"],
+                csv_files=summary["csv_files"],
+            )
+        except Exception as exc:
+            set_training_state(
+                "failed",
+                f"Training failed: {exc}",
+                stage="failed",
+                progress=1.0,
+            )
+
+    worker = Thread(target=run_job, daemon=True)
+    worker.start()
+    return training_status_payload()
 
 
 def frame_with_message(message):
@@ -424,9 +627,11 @@ def generate_detection_stream():
 
     with _camera_lock:
         cap = None
+        model = None
+        label_encoder = None
+        active_model_version = -1
 
         try:
-            model, label_encoder = load_model()
             hands = create_hand_landmarker(num_hands=2)
             cap = cv2.VideoCapture(0)
 
@@ -452,6 +657,10 @@ def generate_detection_stream():
                     continue
 
                 frame = cv2.flip(frame, 1)
+                latest_model_version = current_model_version()
+                if latest_model_version != active_model_version:
+                    model, label_encoder = load_model()
+                    active_model_version = latest_model_version
                 detected_hands = detect_hands(hands, frame, int(time.time() * 1000))
                 frame_predictions = []
 
@@ -486,18 +695,6 @@ def generate_detection_stream():
                                 ],
                             }
                         )
-                        y_position = 60 + idx * 60
-                        color = (0, 255 - idx * 100, 255)
-                        cv2.putText(
-                            frame,
-                            f"Hand {idx + 1}: {label} ({confidence * 100:.0f}%)",
-                            (10, y_position),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            1.2,
-                            color,
-                            3,
-                        )
-
                 with _collection_lock:
                     if _collection_state["active"]:
                         cv2.putText(
@@ -561,6 +758,8 @@ def bootstrap():
             "prediction": prediction_output_payload(),
             "logs": prediction_logs_payload()["logs"],
             "collection": collection_status_payload(),
+            "training": training_status_payload(),
+            "model": get_model_metadata(),
         }
     )
 
@@ -572,27 +771,35 @@ def train():
             return jsonify({"message": "Training is already running.", "training": training_status_payload()}), 409
 
     payload = request.get_json(silent=True) or {}
-    source_key = payload.get("source", "auto")
-    set_training_state("training", "Training in progress...")
-
     try:
-        message = train_model_for_ui(source_key)
-    except Exception as exc:
-        error_message = f"Training failed: {exc}"
-        set_training_state("failed", error_message)
-        return jsonify({"message": error_message, "training": training_status_payload(), "stats": stats_payload()}), 400
+        training_state = launch_training_job(payload.get("source", "auto"))
+    except ValueError as exc:
+        return jsonify({"message": str(exc), "training": training_status_payload(), "stats": stats_payload()}), 400
+    return (
+        jsonify(
+            {
+                "message": "Training started.",
+                "training": training_state,
+                "stats": stats_payload(),
+            }
+        ),
+        202,
+    )
 
-    with _model_lock:
-        _model_cache["model"] = None
-        _model_cache["label_encoder"] = None
-    invalidate_model_metadata_cache()
-    set_training_state("completed", message)
+
+@app.get("/training/status")
+def training_status():
+    return jsonify(training_status_payload())
+
+
+@app.get("/training/sources")
+def training_sources():
+    metadata = get_model_metadata()
     return jsonify(
         {
-            "message": message,
-            "training": training_status_payload(),
-            "stats": stats_payload(),
-            "training_source": source_key,
+            "sources": metadata["training_sources"],
+            "default_source": metadata["default_training_source"],
+            "resolved_auto_source": metadata["resolved_auto_source"],
         }
     )
 
@@ -626,9 +833,9 @@ def stats():
 @app.post("/collection/start")
 def collection_start():
     payload = request.get_json(silent=True) or {}
-    success, message = start_collection(payload.get("label", ""))
+    success, message, error_type = start_collection(payload.get("label", ""))
     status_code = 200 if success else 400
-    return jsonify({"message": message, **collection_status_payload()}), status_code
+    return jsonify({"message": message, "error_type": error_type, **collection_status_payload()}), status_code
 
 
 @app.post("/collect/stop")
@@ -641,6 +848,25 @@ def collection_stop():
 @app.get("/model-info")
 def model_info():
     return jsonify(get_model_metadata())
+
+
+@app.post("/dataset/clear")
+def dataset_clear():
+    payload = request.get_json(silent=True) or {}
+    try:
+        result = clear_training_dataset(payload.get("source", "auto"))
+    except ValueError as exc:
+        return jsonify({"message": str(exc)}), 400
+    except RuntimeError as exc:
+        return jsonify({"message": str(exc)}), 409
+
+    return jsonify(
+        {
+            **result,
+            "stats": stats_payload(),
+            "model": get_model_metadata(),
+        }
+    )
 
 
 @app.get("/health")
