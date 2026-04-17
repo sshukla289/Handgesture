@@ -8,6 +8,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
 
+
+def emit_progress(progress_callback, stage, progress, message, **extra):
+    if callable(progress_callback):
+        progress_callback(
+            {
+                "stage": stage,
+                "progress": progress,
+                "message": message,
+                **extra,
+            }
+        )
+
 def resolve_training_data_dir(data_dir):
     if data_dir is not None:
         return data_dir
@@ -19,14 +31,24 @@ def resolve_training_data_dir(data_dir):
     return 'datasets'
 
 
-def train_model(data_dir=None, model_dir='model'):
+def train_model(data_dir=None, model_dir='model', progress_callback=None):
     data_dir = resolve_training_data_dir(data_dir)
     all_data = []
 
     if not os.path.isdir(data_dir):
         raise FileNotFoundError("The datasets folder was not found.")
 
-    for file in os.listdir(data_dir):
+    csv_files = sorted(file for file in os.listdir(data_dir) if file.endswith(".csv"))
+    emit_progress(
+        progress_callback,
+        "scanning",
+        0.08,
+        f"Scanning {len(csv_files)} training files in {data_dir}.",
+        csv_files=len(csv_files),
+        data_dir=data_dir,
+    )
+
+    for index, file in enumerate(csv_files, start=1):
         if file.endswith(".csv"):
             file_path = os.path.join(data_dir, file)
             df = pd.read_csv(file_path, header=None)
@@ -38,12 +60,32 @@ def train_model(data_dir=None, model_dir='model'):
             else:
                 print(f"[WARNING] Skipping {file} due to unexpected format.")
 
+            base_progress = 0.16
+            file_progress = (index / max(len(csv_files), 1)) * 0.28
+            emit_progress(
+                progress_callback,
+                "loading",
+                base_progress + file_progress,
+                f"Loading samples from {file}.",
+                current_file=file,
+                files_processed=index,
+                csv_files=len(csv_files),
+            )
+
     if not all_data:
         raise ValueError("No valid training data was found in the datasets folder.")
 
     df = pd.concat(all_data, ignore_index=True)
     X = df.drop('label', axis=1).values
     y = df['label'].values
+
+    emit_progress(
+        progress_callback,
+        "preparing",
+        0.5,
+        "Encoding labels and preparing the training split.",
+        samples=len(df),
+    )
 
     # Encode labels
     label_encoder = LabelEncoder()
@@ -69,11 +111,25 @@ def train_model(data_dir=None, model_dir='model'):
         X_test, y_test = None, None
 
     # Train SVM
+    emit_progress(
+        progress_callback,
+        "training",
+        0.72,
+        "Fitting the SVM classifier.",
+        samples=len(df),
+        classes=class_count,
+    )
     clf = SVC(kernel='rbf', probability=True)
     clf.fit(X_train, y_train)
 
     # Accuracy
     accuracy = None
+    emit_progress(
+        progress_callback,
+        "evaluating",
+        0.88,
+        "Evaluating the refreshed model.",
+    )
     if X_test is not None and y_test is not None:
         accuracy = clf.score(X_test, y_test)
         print(f"[INFO] Model trained with accuracy: {accuracy * 100:.2f}%")
@@ -81,14 +137,31 @@ def train_model(data_dir=None, model_dir='model'):
         print("[INFO] Model trained without a holdout accuracy score because the dataset is still small.")
 
     # Save model and label encoder
+    emit_progress(
+        progress_callback,
+        "saving",
+        0.96,
+        "Saving model artifacts and label encoder.",
+    )
     os.makedirs(model_dir, exist_ok=True)
     joblib.dump(clf, os.path.join(model_dir, 'svm_model.pkl'))
     joblib.dump(label_encoder, os.path.join(model_dir, 'label_encoder.pkl'))
     print(f"[INFO] Model and encoder saved in '{model_dir}/' directory.")
+    emit_progress(
+        progress_callback,
+        "saved",
+        1.0,
+        "Model artifacts saved successfully.",
+        samples=len(df),
+        classes=class_count,
+        accuracy=accuracy,
+    )
     return {
         "accuracy": accuracy,
         "samples": len(df),
         "classes": class_count,
+        "data_dir": data_dir,
+        "csv_files": len(csv_files),
     }
 
 if __name__ == "__main__":
